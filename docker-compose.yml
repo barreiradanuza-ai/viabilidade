@@ -1,0 +1,56 @@
+# Sobe o sistema inteiro: banco + aplicação.
+#
+#   1. copie .env.example para .env e preencha ADMIN_EMAIL e ADMIN_SENHA
+#   2. docker compose up -d --build
+#   3. abra http://localhost:3000
+#
+# Para parar:            docker compose down
+# Para ver os logs:      docker compose logs -f app
+# Para apagar os dados:  docker compose down -v   (apaga o banco!)
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: viabilidade
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viabilidade}
+      POSTGRES_DB: viabilidade
+    volumes:
+      - dados-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U viabilidade -d viabilidade']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Sem "ports": o banco não fica exposto na sua rede, só a aplicação
+    # o alcança. Se quiser abrir para um cliente SQL, descomente:
+    # ports: ['5432:5432']
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://viabilidade:${POSTGRES_PASSWORD:-viabilidade}@db:5432/viabilidade
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_NOME: ${ADMIN_NOME:-Administrador}
+      ADMIN_SENHA: ${ADMIN_SENHA:-}
+      NIO_MODO: ${NIO_MODO:-INDISPONIVEL}
+      NIO_MAX_IDADE_HORAS: ${NIO_MAX_IDADE_HORAS:-48}
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-536870912}
+    ports:
+      - '${PORTA:-3000}:3000'
+    volumes:
+      - dados-app:/dados
+      # Coloque os CSVs da TIM na pasta "bases" ao lado deste arquivo para
+      # importar por linha de comando quando forem muito grandes:
+      #   docker compose exec app npm run tim:importar -- /bases/*.csv
+      - ./bases:/bases
+
+volumes:
+  dados-db:
+  dados-app:
